@@ -7,7 +7,6 @@ import {
   Pressable,
   ScrollView,
   Image,
-  TextInput,
   KeyboardAvoidingView,
   Platform,
   Animated,
@@ -17,17 +16,11 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // ============================================================================
 // VISUAL DESIGN PALETTE — WELCOME SCREEN & CORE THEME
-// Derived directly from the provided reference specification:
-// - Cream background:   #F5F3E8
-// - Primary black:      #080808
-// - Main text (ink):    #171512
-// - Muted gold border:  #A99A7D
-// - Secondary gold:     #D0C4AB
-// - Footer text:        #777267
-// - Pure white:         #FFFFFF
+// Derived directly from the provided reference specifications
 // ============================================================================
 const THEME = {
   cream: '#F5F3E8',
@@ -40,64 +33,13 @@ const THEME = {
   warmGreyBeige: '#E8E4D9',
 } as const;
 
-// Screen identifiers for simple state-based navigation
-type Screen =
-  | 'title'
-  | 'start-menu'
-  | 'family-creation'
-  | 'character-basic-info'
-  | 'character-review'
-  | 'no-save-found';
-
-type Gender = 'male' | 'female';
+// Screen identifiers for active navigation
+// Strictly limited to required screens: obsolete flows completely removed
+type Screen = 'title' | 'character-setup' | 'city-picker' | 'no-save-found';
 
 // ============================================================================
-// CURATED LOCAL INDIAN NAMES POOLS
-// All data is kept local — no external APIs, accounts, or services.
+// CURATED LOCAL INDIAN DATA POOLS
 // ============================================================================
-const INDIAN_SURNAMES: readonly string[] = [
-  'Sharma',
-  'Patel',
-  'Mehta',
-  'Iyer',
-  'Nair',
-  'Gupta',
-  'Deshmukh',
-  'Kulkarni',
-  'Reddy',
-  'Verma',
-  'Chatterjee',
-  'Joshi',
-  'Rao',
-  'Bhat',
-  'Chauhan',
-  'Banerjee',
-  'Mukherjee',
-  'Gill',
-  'Kapoor',
-  'Menon',
-  'Singhania',
-  'Bose',
-  'Mishra',
-  'Agarwal',
-  'Pillai',
-  'Malhotra',
-  'Bhattacharya',
-  'Naidu',
-  'Choudhury',
-  'Kaur',
-  'Das',
-  'Hegde',
-  'Saxena',
-  'Chawla',
-  'Ghosh',
-  'Pandey',
-  'Goswami',
-  'Acharya',
-  'Trivedi',
-  'Yadav',
-];
-
 const INDIAN_MALE_FIRST_NAMES: readonly string[] = [
   'Aarav',
   'Vihaan',
@@ -126,73 +68,40 @@ const INDIAN_MALE_FIRST_NAMES: readonly string[] = [
   'Aniruddh',
 ];
 
-const INDIAN_FEMALE_FIRST_NAMES: readonly string[] = [
-  'Aanya',
-  'Diya',
-  'Saanvi',
-  'Zara',
-  'Pari',
-  'Ananya',
-  'Riya',
-  'Meera',
-  'Kavya',
-  'Avani',
-  'Ishita',
-  'Pooja',
-  'Sneha',
-  'Shreya',
-  'Tanya',
-  'Priya',
-  'Anika',
-  'Aditi',
-  'Tanvi',
-  'Divya',
-  'Maya',
-  'Riddhi',
-  'Tara',
-  'Neha',
-  'Nandini',
-];
+const INDIAN_CITIES = [
+  'Mumbai',
+  'Delhi',
+  'Bengaluru',
+  'Hyderabad',
+  'Chennai',
+  'Kolkata',
+  'Pune',
+  'Ahmedabad',
+  'Jaipur',
+  'Lucknow',
+  'Chandigarh',
+  'Kochi',
+] as const;
+
+export type IndianCity = (typeof INDIAN_CITIES)[number];
 
 /**
- * Generates three unique random surnames from the pool, avoiding current duplicates.
- */
-function getThreeRandomSurnames(exclude: string[] = []): string[] {
-  const available = INDIAN_SURNAMES.filter((name) => !exclude.includes(name));
-  const pool = available.length >= 3 ? available : [...INDIAN_SURNAMES];
-  const shuffled = [...pool].sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, 3);
-}
-
-/**
- * Generates a random Indian first name.
- * Uses gender-specific pool if selected, otherwise combined pool.
+ * Generates a random Indian first name from the pool.
  * Avoids returning the currently active name if alternatives exist.
  */
-function getRandomFirstName(
-  gender: Gender | null,
-  currentName: string = ''
-): string {
-  let pool: readonly string[];
-  if (gender === 'male') {
-    pool = INDIAN_MALE_FIRST_NAMES;
-  } else if (gender === 'female') {
-    pool = INDIAN_FEMALE_FIRST_NAMES;
-  } else {
-    pool = [...INDIAN_MALE_FIRST_NAMES, ...INDIAN_FEMALE_FIRST_NAMES];
-  }
-
+function getRandomFirstName(currentName: string = ''): string {
   const normalizedCurrent = currentName.trim().toLowerCase();
-  const candidates = pool.filter(
+  const candidates = INDIAN_MALE_FIRST_NAMES.filter(
     (name) => name.toLowerCase() !== normalizedCurrent
   );
-  const activePool = candidates.length > 0 ? candidates : pool;
+  const activePool =
+    candidates.length > 0 ? candidates : INDIAN_MALE_FIRST_NAMES;
   const randomIndex = Math.floor(Math.random() * activePool.length);
   return activePool[randomIndex];
 }
 
 // ============================================================================
-// REUSABLE STANDARD BUTTON (Used on inner forms)
+// REUSABLE STANDARD BUTTON (Used on inner informational / picker screens)
 // ============================================================================
 interface AppButtonProps {
   title: string;
@@ -239,14 +148,187 @@ function AppButton({
 }
 
 // ============================================================================
+// CHARACTER SETUP CARD BUTTON (Faithful reproduction of .legacy-btn)
+// Translates 115deg linear gradients, glossy highlight, dark icon panel,
+// 3D bottom bevel, exact borders, drop shadows, and typography.
+// ============================================================================
+interface SetupButtonProps {
+  icon: string | React.ReactNode;
+  title: string;
+  subtitle: string;
+  gradientColors: readonly [string, string, ...string[]];
+  gradientLocations?: readonly [number, number, ...number[]];
+  panelColor: string;
+  borderColor: string;
+  bottomBevelColor?: string;
+  accessibilityLabel: string;
+  onPress?: () => void;
+  isPrimaryAction?: boolean;
+}
+
+function SetupButton({
+  icon,
+  title,
+  subtitle,
+  gradientColors,
+  gradientLocations,
+  panelColor,
+  borderColor,
+  bottomBevelColor,
+  accessibilityLabel,
+  onPress,
+  isPrimaryAction = false,
+}: SetupButtonProps) {
+  const { width } = useWindowDimensions();
+  const isNarrow = width < 360;
+
+  const minHeight = isPrimaryAction ? (isNarrow ? 68 : 74) : isNarrow ? 63 : 68;
+  const iconWidth = isNarrow ? 62 : 76;
+  const iconFontSize = isNarrow ? 23 : (isPrimaryAction ? 28 : 26);
+  const titleFontSize = isPrimaryAction ? (isNarrow ? 16 : 17) : (isNarrow ? 15 : 17);
+  const subtitleFontSize = isNarrow ? 10 : 11;
+  const bevelColor = bottomBevelColor ?? panelColor;
+
+  const cardContent = (
+    <View
+      style={[
+        styles.setupBtnWrapper,
+        {
+          minHeight,
+          borderColor,
+          borderBottomColor: bevelColor,
+          borderRadius: isNarrow ? 9 : 13,
+        },
+      ]}
+    >
+      <LinearGradient
+        colors={gradientColors}
+        locations={gradientLocations}
+        start={{ x: 0, y: 0.1 }}
+        end={{ x: 1, y: 0.9 }}
+        style={[
+          styles.setupBtnGradient,
+          {
+            minHeight: minHeight - 4,
+            borderRadius: isNarrow ? 8 : 12,
+          },
+        ]}
+      >
+        {/* Glossy top-half highlight (.legacy-btn::before in CSS) */}
+        <LinearGradient
+          colors={[
+            'rgba(255, 255, 255, 0.15)',
+            'rgba(255, 255, 255, 0.025)',
+            'transparent',
+          ]}
+          locations={[0, 0.5, 1.0]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.setupBtnGloss}
+          pointerEvents="none"
+        />
+
+        {/* Solid dark icon panel (.btn-icon in CSS) */}
+        <View
+          style={[
+            styles.setupBtnIconPanel,
+            {
+              width: iconWidth,
+              backgroundColor: panelColor,
+              minHeight: minHeight - 6,
+            },
+          ]}
+        >
+          {typeof icon === 'string' ? (
+            <Text
+              style={[
+                styles.setupBtnIconText,
+                { fontSize: iconFontSize },
+              ]}
+            >
+              {icon}
+            </Text>
+          ) : (
+            icon
+          )}
+        </View>
+
+        {/* Button center label (.btn-label in CSS) */}
+        <View style={styles.setupBtnLabel}>
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={[styles.setupBtnTitle, { fontSize: titleFontSize }]}
+          >
+            {title}
+          </Text>
+          <Text
+            numberOfLines={1}
+            style={[styles.setupBtnSubtitle, { fontSize: subtitleFontSize }]}
+          >
+            {subtitle}
+          </Text>
+        </View>
+
+        {/* Trailing arrow (.btn-arrow in CSS) */}
+        <Text style={styles.setupBtnArrow} aria-hidden={true}>
+          ›
+        </Text>
+      </LinearGradient>
+    </View>
+  );
+
+  // If interactive (e.g. City card), wrap in Pressable; otherwise render non-interactive View
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.setupBtnPressable,
+          pressed && styles.setupBtnPressed,
+        ]}
+      >
+        {cardContent}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View
+      accessibilityRole="none"
+      accessibilityLabel={accessibilityLabel}
+      style={styles.setupBtnPressable}
+    >
+      {cardContent}
+    </View>
+  );
+}
+
+// ============================================================================
 // MAIN APP COMPONENT
 // ============================================================================
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('title');
 
   // Real save persistence does not exist yet. Kept false so we do not pretend
-  // saved data exists (respects requirement 6).
+  // saved data exists.
   const hasExistingSave = false;
+
+  // Character setup state (India-first defaults)
+  const [surname] = useState<string>('Sharma');
+  const [firstName, setFirstName] = useState<string>(() =>
+    getRandomFirstName()
+  );
+  const [selectedCity, setSelectedCity] = useState<IndianCity>('Mumbai');
+
+  // The refresh button is an active control on the setup screen:
+  // generates a new random first name and immediately updates the Name card
+  const handleRefreshName = () => {
+    const nextName = getRandomFirstName(firstName);
+    setFirstName(nextName);
+  };
 
   // Window dimensions for responsive scaling on small / short screens
   const { width, height } = useWindowDimensions();
@@ -279,13 +361,11 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
 
-    // Check system preference for reduced motion
     AccessibilityInfo.isReduceMotionEnabled()
       .then((reduceMotion) => {
         if (!isMounted) return;
 
         if (reduceMotion) {
-          // Non-animated fallback: settle immediately at final positions
           logoTranslateY.setValue(-48);
           contentOpacity.setValue(1);
           hasAnimatedWelcome.current = true;
@@ -293,54 +373,41 @@ export default function App() {
         }
 
         if (hasAnimatedWelcome.current) {
-          // If already animated once in this session, keep final resting state
           logoTranslateY.setValue(-48);
           contentOpacity.setValue(1);
           return;
         }
 
-        hasAnimatedWelcome.current = true;
-
-        // 1. Independent logo animation: Delay 700ms, duration 2000ms
-        Animated.timing(logoTranslateY, {
+        // Timing curve matching CSS cubic-bezier(0.22, 1, 0.36, 1)
+        const logoAnimation = Animated.timing(logoTranslateY, {
           toValue: -48,
           duration: 2000,
           delay: 700,
           easing: Easing.bezier(0.22, 1, 0.36, 1),
           useNativeDriver: true,
-        }).start();
+        });
 
-        // 2. Independent menu fade-in: Delay 2000ms, duration 1200ms
-        Animated.timing(contentOpacity, {
+        // Fade in matching CSS 1.2s ease 2s forwards
+        const contentAnimation = Animated.timing(contentOpacity, {
           toValue: 1,
           duration: 1200,
           delay: 2000,
-          easing: Easing.inOut(Easing.ease),
+          easing: Easing.out(Easing.ease),
           useNativeDriver: true,
-        }).start();
+        });
+
+        Animated.parallel([logoAnimation, contentAnimation]).start(() => {
+          if (isMounted) {
+            hasAnimatedWelcome.current = true;
+          }
+        });
       })
       .catch(() => {
+        // Fallback if AccessibilityInfo is unavailable
         if (!isMounted) return;
-        if (hasAnimatedWelcome.current) {
-          logoTranslateY.setValue(-48);
-          contentOpacity.setValue(1);
-          return;
-        }
+        logoTranslateY.setValue(-48);
+        contentOpacity.setValue(1);
         hasAnimatedWelcome.current = true;
-        Animated.timing(logoTranslateY, {
-          toValue: -48,
-          duration: 2000,
-          delay: 700,
-          easing: Easing.bezier(0.22, 1, 0.36, 1),
-          useNativeDriver: true,
-        }).start();
-        Animated.timing(contentOpacity, {
-          toValue: 1,
-          duration: 1200,
-          delay: 2000,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }).start();
       });
 
     return () => {
@@ -348,146 +415,13 @@ export default function App() {
     };
   }, [logoTranslateY, contentOpacity]);
 
-  // --------------------------------------------------------------------------
-  // Family creation state
-  // --------------------------------------------------------------------------
-  const [generatedSurnames, setGeneratedSurnames] = useState<string[]>(() =>
-    getThreeRandomSurnames()
-  );
-  const [selectedGeneratedSurname, setSelectedGeneratedSurname] = useState<
-    string | null
-  >(null);
-  const [customSurname, setCustomSurname] = useState<string>('');
-  const [surnameValidationError, setSurnameValidationError] = useState<
-    string | null
-  >(null);
-  const [confirmedSurname, setConfirmedSurname] = useState<string>('');
-
-  // --------------------------------------------------------------------------
-  // Character basic information state
-  // --------------------------------------------------------------------------
-  const [firstName, setFirstName] = useState<string>('');
-  const [gender, setGender] = useState<Gender | null>(null);
-  const [nameValidationError, setNameValidationError] = useState<string | null>(
-    null
-  );
-  const [genderValidationError, setGenderValidationError] = useState<
-    string | null
-  >(null);
-
-  // --------------------------------------------------------------------------
-  // Family surname handlers
-  // --------------------------------------------------------------------------
-  const handleSelectGeneratedSurname = (surname: string) => {
-    setSelectedGeneratedSurname(surname);
-    setCustomSurname('');
-    setSurnameValidationError(null);
-  };
-
-  const handleCustomSurnameChange = (text: string) => {
-    setCustomSurname(text);
-    setSelectedGeneratedSurname(null);
-    setSurnameValidationError(null);
-  };
-
-  const handleGenerateAnotherSurname = () => {
-    const nextThree = getThreeRandomSurnames(generatedSurnames);
-    setGeneratedSurnames(nextThree);
-    if (
-      selectedGeneratedSurname &&
-      !nextThree.includes(selectedGeneratedSurname)
-    ) {
-      setSelectedGeneratedSurname(null);
-    }
-    setSurnameValidationError(null);
-  };
-
-  const handleContinueFromSurname = () => {
-    const rawSurname = selectedGeneratedSurname || customSurname;
-    const trimmed = rawSurname.trim();
-
-    if (!trimmed) {
-      setSurnameValidationError('Please choose or enter a family surname.');
-      return;
-    }
-
-    if (trimmed.length < 2) {
-      setSurnameValidationError(
-        'Surname must be at least 2 characters long.'
-      );
-      return;
-    }
-
-    const surnameRegex = /^[A-Za-z\s'-]+$/;
-    if (!surnameRegex.test(trimmed)) {
-      setSurnameValidationError(
-        'Surname can only contain letters, hyphens, spaces, and apostrophes.'
-      );
-      return;
-    }
-
-    setSurnameValidationError(null);
-    setConfirmedSurname(trimmed);
-    setCurrentScreen('character-basic-info');
-  };
-
-  // --------------------------------------------------------------------------
-  // Character info handlers
-  // --------------------------------------------------------------------------
-  const handleGenerateRandomName = () => {
-    const randomName = getRandomFirstName(gender, firstName);
-    setFirstName(randomName);
-    setNameValidationError(null);
-  };
-
-  const handleFirstNameChange = (text: string) => {
-    setFirstName(text);
-    setNameValidationError(null);
-  };
-
-  const handleSelectGender = (selected: Gender) => {
-    setGender(selected);
-    setGenderValidationError(null);
-  };
-
-  const handleContinueFromCharacterInfo = () => {
-    let hasError = false;
-
-    const trimmedFirstName = firstName.trim();
-    if (!trimmedFirstName) {
-      setNameValidationError('Please enter or generate a first name.');
-      hasError = true;
-    } else if (trimmedFirstName.length < 2) {
-      setNameValidationError('First name must be at least 2 characters long.');
-      hasError = true;
-    } else if (!/^[A-Za-z\s'-]+$/.test(trimmedFirstName)) {
-      setNameValidationError(
-        'First name can only contain letters, hyphens, spaces, and apostrophes.'
-      );
-      hasError = true;
-    } else {
-      setNameValidationError(null);
-    }
-
-    if (!gender) {
-      setGenderValidationError('Please choose a gender (♂ MALE or ♀ FEMALE).');
-      hasError = true;
-    } else {
-      setGenderValidationError(null);
-    }
-
-    if (hasError) {
-      return;
-    }
-
-    setFirstName(trimmedFirstName);
-    setCurrentScreen('character-review');
-  };
-
   return (
     <SafeAreaProvider>
       <SafeAreaView
-        style={styles.safeArea}
+        style={[
+          styles.safeArea,
+          currentScreen === 'character-setup' && styles.safeAreaSetup,
+        ]}
         edges={['top', 'bottom', 'left', 'right']}
       >
         <StatusBar style="dark" />
@@ -525,7 +459,7 @@ export default function App() {
                   />
                 </Animated.View>
 
-                {/* Content Container with Fade-in (No Sliding) */}
+                {/* Content Container with Fade-in */}
                 <Animated.View
                   style={[
                     styles.welcomeContent,
@@ -540,7 +474,7 @@ export default function App() {
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Start new life"
-                      onPress={() => setCurrentScreen('family-creation')}
+                      onPress={() => setCurrentScreen('character-setup')}
                       style={({ pressed }) => [
                         styles.menuButton,
                         styles.startButton,
@@ -577,7 +511,6 @@ export default function App() {
                     </Pressable>
 
                     {/* Secondary Button: LOAD PREVIOUS LIFE */}
-                    {/* Always visible; navigates to no-save-found until persistence is implemented */}
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Load previous life"
@@ -624,7 +557,6 @@ export default function App() {
                     </Pressable>
                   </View>
 
-
                   {/* Centered Footer */}
                   <Text
                     style={[
@@ -639,281 +571,276 @@ export default function App() {
             )}
 
             {/* ============================================================== */}
-            {/* 2. CREATE A NEW FAMILY (SURNAME SELECTION)                     */}
+            {/* 2. CHARACTER SETUP — "START A NEW LIFE" SCREEN                 */}
+            {/* Faithful translation of style2.css and HTML reference         */}
+            {/* 135deg gold background flows across the complete screen        */}
             {/* ============================================================== */}
-            {currentScreen === 'family-creation' && (
-              <View style={styles.formScreenContainer}>
-                <View style={styles.formHeaderGroup}>
-                  <Text style={styles.heading}>CREATE YOUR FAMILY</Text>
-                  <Text style={styles.instruction}>
-                    Choose your family surname to begin your legacy.
+            {currentScreen === 'character-setup' && (
+              <LinearGradient
+                colors={['#F5F3E8', '#E4D8BF', '#C8B58B']}
+                locations={[0, 0.55, 1.0]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.setupScreenContainer}
+              >
+                {/* ── Topbar (.topbar in CSS) ── */}
+                <View style={styles.setupTopbar}>
+                  {/* Close button (×) — returns cleanly to welcome screen */}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Close"
+                    onPress={() => setCurrentScreen('title')}
+                    style={({ pressed }) => [
+                      styles.iconButtonWrapper,
+                      pressed && styles.iconButtonPressed,
+                    ]}
+                  >
+                    <LinearGradient
+                      colors={[
+                        'rgba(255, 255, 255, 0.65)',
+                        'rgba(169, 154, 131, 0.14)',
+                      ]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 0.8, y: 1 }}
+                      style={styles.iconButtonGradient}
+                    >
+                      <Text style={styles.closeIconText}>×</Text>
+                    </LinearGradient>
+                  </Pressable>
+
+                  {/* Brand */}
+                  <Text style={styles.setupBrand}>Legacy</Text>
+
+                  {/* Refresh button (↻) — generates a different random first name */}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Refresh name"
+                    onPress={handleRefreshName}
+                    style={({ pressed }) => [
+                      styles.iconButtonWrapper,
+                      pressed && styles.iconButtonPressed,
+                    ]}
+                  >
+                    <LinearGradient
+                      colors={[
+                        'rgba(255, 255, 255, 0.65)',
+                        'rgba(169, 154, 131, 0.14)',
+                      ]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 0.8, y: 1 }}
+                      style={styles.iconButtonGradient}
+                    >
+                      <Text style={styles.refreshIconText}>↻</Text>
+                    </LinearGradient>
+                  </Pressable>
+                </View>
+
+                {/* ── Intro Section (.intro in CSS) ── */}
+                <View style={styles.setupIntro}>
+                  <Text style={styles.setupIntroTitle}>Start a new life!</Text>
+                  <Text style={styles.setupIntroSubtitle}>
+                    Your story begins here.
                   </Text>
                 </View>
 
-                {/* Section A: Surnames Options */}
-                <View style={styles.sectionGroup}>
-                  <Text style={styles.sectionLabel}>CHOOSE A SURNAME</Text>
-                  <View style={styles.surnamesList}>
-                    {generatedSurnames.map((name) => {
-                      const isSelected = selectedGeneratedSurname === name;
-                      return (
-                        <TouchableOpacity
-                          key={name}
-                          activeOpacity={0.8}
-                          onPress={() => handleSelectGeneratedSurname(name)}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Select surname ${name}`}
-                          accessibilityState={{ selected: isSelected }}
+                {/* ── Main Setup Cards (.setup in CSS) ── */}
+                <View
+                  style={[
+                    styles.setupCardsSection,
+                    isNarrowScreen && styles.setupCardsSectionNarrow,
+                  ]}
+                >
+                  {/* 1. Start life — Emerald Green (Must do nothing when tapped) */}
+                  <SetupButton
+                    icon="🌱"
+                    title="Start a new life!"
+                    subtitle="Begin your journey"
+                    gradientColors={['#0D5C3A', '#158754', '#1EAE6D']}
+                    gradientLocations={[0, 0.48, 1.0]}
+                    borderColor="#35B374"
+                    bottomBevelColor="#072F1D"
+                    panelColor="#094028"
+                    isPrimaryAction
+                    accessibilityLabel="Start a new life! Begin your journey"
+                  />
+
+                  {/* Divider (.divider in CSS) */}
+                  <LinearGradient
+                    colors={[
+                      'transparent',
+                      'rgba(120, 107, 86, 0.55)',
+                      'transparent',
+                    ]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.setupDivider}
+                  />
+
+                  {/* 2. Name — Blue (Must do nothing when tapped) */}
+                  <SetupButton
+                    icon="👤"
+                    title={`${firstName} ${surname}`}
+                    subtitle="Click to change name"
+                    gradientColors={['#174A78', '#287FC1', '#64B5F6']}
+                    gradientLocations={[0, 0.55, 1.0]}
+                    borderColor="#90CAF9"
+                    bottomBevelColor="#123B64"
+                    panelColor="#123B64"
+                    accessibilityLabel={`Character name: ${firstName} ${surname}. Click to change name`}
+                  />
+
+                  {/* 3. Gender — Blue (Must do nothing when tapped) */}
+                  <SetupButton
+                    icon="♂"
+                    title="Male"
+                    subtitle="Click to change gender"
+                    gradientColors={['#16456F', '#2585CC', '#64B5F6']}
+                    gradientLocations={[0, 0.48, 1.0]}
+                    borderColor="#90CAF9"
+                    bottomBevelColor="#10365C"
+                    panelColor="#10365C"
+                    accessibilityLabel="Gender: Male. Click to change gender"
+                  />
+
+                  {/* 4. Country — Blue (Must do nothing when tapped) */}
+                  <SetupButton
+                    icon="🇮🇳"
+                    title="India"
+                    subtitle="Click to change country"
+                    gradientColors={['#194B77', '#318BD0', '#64B5F6']}
+                    gradientLocations={[0, 0.55, 1.0]}
+                    borderColor="#90CAF9"
+                    bottomBevelColor="#153D63"
+                    panelColor="#153D63"
+                    accessibilityLabel="Country: India. Click to change country"
+                  />
+
+                  {/* 5. City — Blue (ACTIVE! Preserves working city selection) */}
+                  <SetupButton
+                    icon="📍"
+                    title={selectedCity}
+                    subtitle="Click to change city"
+                    gradientColors={['#194B77', '#318BD0', '#64B5F6']}
+                    gradientLocations={[0, 0.55, 1.0]}
+                    borderColor="#90CAF9"
+                    bottomBevelColor="#153D63"
+                    panelColor="#153D63"
+                    accessibilityLabel={`City: ${selectedCity}. Click to change city`}
+                    onPress={() => setCurrentScreen('city-picker')}
+                  />
+
+                  {/* Section Label: PERSONALIZE YOUR LIFE (.section-label in CSS) */}
+                  <Text style={styles.setupSectionLabel}>
+                    PERSONALIZE YOUR LIFE
+                  </Text>
+
+                  {/* 6. Special skill — Violet / Lavender / Mint (Must do nothing when tapped) */}
+                  <SetupButton
+                    icon="⚡"
+                    title="Special skill"
+                    subtitle="Choose your natural talent"
+                    gradientColors={['#4e148c', '#4e148c', '#a882dd', '#b3ffb3']}
+                    gradientLocations={[0, 0.20, 0.55, 1.0]}
+                    borderColor="#7b4eb2"
+                    bottomBevelColor="#32095e"
+                    panelColor="#32095e"
+                    accessibilityLabel="Special skill. Choose your natural talent"
+                  />
+
+                  {/* 7. Appearance — Magenta / Amber / Yellow (Must do nothing when tapped) */}
+                  <SetupButton
+                    icon="🎨"
+                    title="Appearance"
+                    subtitle="Customize your character"
+                    gradientColors={['#f048c6', '#d7871e', '#f6ea41']}
+                    gradientLocations={[0, 0.55, 1.0]}
+                    borderColor="#f577d4"
+                    bottomBevelColor="#7a1060"
+                    panelColor="#7a1060"
+                    accessibilityLabel="Appearance. Customize your character"
+                  />
+
+                  {/* 8. Attributes — Crimson / Coral / Cream (Must do nothing when tapped) */}
+                  <SetupButton
+                    icon="📊"
+                    title="Attributes"
+                    subtitle="Customize your abilities"
+                    gradientColors={['#ec0958', '#df3d4d', '#fffbc8']}
+                    gradientLocations={[0, 0.55, 1.0]}
+                    borderColor="#f2467f"
+                    bottomBevelColor="#78032a"
+                    panelColor="#78032a"
+                    accessibilityLabel="Attributes. Customize your abilities"
+                  />
+                </View>
+
+                {/* ── Footer (.footer in CSS) ── */}
+                <View style={styles.setupFooter}>
+                  <Text style={styles.setupFooterText}>
+                    LEGACY <Text style={styles.setupFooterDot}>·</Text> YOUR LIFE, YOUR STORY
+                  </Text>
+                </View>
+              </LinearGradient>
+            )}
+
+            {/* ============================================================== */}
+            {/* 3. CITY PICKER SCREEN (ACTIVE — Preserves working selection)   */}
+            {/* ============================================================== */}
+            {currentScreen === 'city-picker' && (
+              <View style={styles.cityPickerContainer}>
+                <View style={styles.cityPickerHeaderGroup}>
+                  <Text style={styles.heading}>CHOOSE YOUR CITY</Text>
+                  <Text style={styles.instruction}>Select a city in India.</Text>
+                </View>
+
+                <View style={styles.citiesGrid}>
+                  {INDIAN_CITIES.map((city) => {
+                    const isSelected = selectedCity === city;
+                    return (
+                      <TouchableOpacity
+                        key={city}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setSelectedCity(city);
+                          setCurrentScreen('character-setup');
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Select city ${city}`}
+                        accessibilityState={{ selected: isSelected }}
+                        style={[
+                          styles.cityOptionButton,
+                          isSelected
+                            ? styles.cityOptionButtonSelected
+                            : styles.cityOptionButtonUnselected,
+                        ]}
+                      >
+                        <Text
                           style={[
-                            styles.optionButton,
+                            styles.cityOptionButtonText,
                             isSelected
-                              ? styles.optionButtonSelected
-                              : styles.optionButtonUnselected,
+                              ? styles.cityOptionButtonTextSelected
+                              : styles.cityOptionButtonTextUnselected,
                           ]}
                         >
-                          <Text
-                            style={[
-                              styles.optionButtonText,
-                              isSelected
-                                ? styles.optionButtonTextSelected
-                                : styles.optionButtonTextUnselected,
-                            ]}
-                          >
-                            {name}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-
-                  <AppButton
-                    title="GENERATE ANOTHER"
-                    variant="secondary"
-                    height={46}
-                    onPress={handleGenerateAnotherSurname}
-                  />
+                          {city}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
 
-                {/* Section B: Custom Surname Input */}
-                <View style={styles.sectionGroup}>
-                  <Text style={styles.sectionLabel}>
-                    OR ENTER YOUR OWN SURNAME
-                  </Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="Enter family surname"
-                    placeholderTextColor={THEME.black}
-                    value={customSurname}
-                    onChangeText={handleCustomSurnameChange}
-                    autoCapitalize="words"
-                    autoCorrect={false}
-                    maxLength={32}
-                    accessibilityLabel="Enter custom family surname"
-                  />
-                </View>
-
-                {/* Validation Error Banner */}
-                {surnameValidationError && (
-                  <View style={styles.errorContainer}>
-                    <Text style={styles.errorText}>
-                      {surnameValidationError}
-                    </Text>
-                  </View>
-                )}
-
-                {/* Action Buttons */}
-                <View style={styles.formActionsGroup}>
-                  <AppButton
-                    title="CONTINUE"
-                    variant="primary"
-                    onPress={handleContinueFromSurname}
-                  />
+                <View style={styles.cityPickerActionsGroup}>
                   <AppButton
                     title="BACK"
                     variant="secondary"
-                    onPress={() => setCurrentScreen('title')}
+                    onPress={() => setCurrentScreen('character-setup')}
                   />
                 </View>
               </View>
             )}
 
             {/* ============================================================== */}
-            {/* 3. CHARACTER BASIC INFORMATION SCREEN                         */}
-            {/* ============================================================== */}
-            {currentScreen === 'character-basic-info' && (
-              <View style={styles.formScreenContainer}>
-                {/* Header & Subtext */}
-                <View style={styles.formHeaderGroup}>
-                  <Text style={styles.heading}>CREATE YOUR CHARACTER</Text>
-                  <Text style={styles.instruction}>
-                    Family Surname:{' '}
-                    <Text style={styles.instructionBold}>
-                      {confirmedSurname}
-                    </Text>
-                  </Text>
-                </View>
-
-                {/* Section A: First Name */}
-                <View style={styles.sectionGroup}>
-                  <Text style={styles.sectionLabel}>CHARACTER FIRST NAME</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="Enter first name"
-                    placeholderTextColor={THEME.black}
-                    value={firstName}
-                    onChangeText={handleFirstNameChange}
-                    autoCapitalize="words"
-                    autoCorrect={false}
-                    maxLength={32}
-                    accessibilityLabel="Character first name"
-                  />
-
-                  {nameValidationError && (
-                    <Text style={styles.fieldErrorText}>
-                      {nameValidationError}
-                    </Text>
-                  )}
-
-                  <AppButton
-                    title="GENERATE RANDOM NAME"
-                    variant="secondary"
-                    height={46}
-                    onPress={handleGenerateRandomName}
-                  />
-                </View>
-
-                {/* Section B: Gender Selection */}
-                <View style={styles.sectionGroup}>
-                  <Text style={styles.sectionLabel}>CHOOSE GENDER</Text>
-                  <View style={styles.genderRow}>
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      onPress={() => handleSelectGender('male')}
-                      accessibilityRole="button"
-                      accessibilityLabel="Select gender Male"
-                      accessibilityState={{ selected: gender === 'male' }}
-                      style={[
-                        styles.genderButton,
-                        gender === 'male'
-                          ? styles.genderButtonSelected
-                          : styles.genderButtonUnselected,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.genderButtonText,
-                          gender === 'male'
-                            ? styles.genderButtonTextSelected
-                            : styles.genderButtonTextUnselected,
-                        ]}
-                      >
-                        ♂ MALE
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      onPress={() => handleSelectGender('female')}
-                      accessibilityRole="button"
-                      accessibilityLabel="Select gender Female"
-                      accessibilityState={{ selected: gender === 'female' }}
-                      style={[
-                        styles.genderButton,
-                        gender === 'female'
-                          ? styles.genderButtonSelected
-                          : styles.genderButtonUnselected,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.genderButtonText,
-                          gender === 'female'
-                            ? styles.genderButtonTextSelected
-                            : styles.genderButtonTextUnselected,
-                        ]}
-                      >
-                        ♀ FEMALE
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {genderValidationError && (
-                    <Text style={styles.fieldErrorText}>
-                      {genderValidationError}
-                    </Text>
-                  )}
-                </View>
-
-                {/* Section C: Action Buttons */}
-                <View style={styles.formActionsGroup}>
-                  <AppButton
-                    title="CONTINUE"
-                    variant="primary"
-                    onPress={handleContinueFromCharacterInfo}
-                  />
-                  <AppButton
-                    title="BACK"
-                    variant="secondary"
-                    onPress={() => setCurrentScreen('family-creation')}
-                  />
-                </View>
-              </View>
-            )}
-
-            {/* ============================================================== */}
-            {/* 4. CHARACTER REVIEW (TEMPORARY PLACEHOLDER)                    */}
-            {/* ============================================================== */}
-            {currentScreen === 'character-review' && (
-              <View style={styles.placeholderContainer}>
-                <View style={styles.placeholderContent}>
-                  <Text style={styles.heading}>CHARACTER REVIEW</Text>
-
-                  <View style={styles.summaryCard}>
-                    <View style={styles.summaryRow}>
-                      <Text style={styles.summaryLabel}>Full Name</Text>
-                      <Text style={styles.summaryValueBold}>
-                        {firstName} {confirmedSurname}
-                      </Text>
-                    </View>
-
-                    <View style={styles.summaryDivider} />
-
-                    <View style={styles.summaryRow}>
-                      <Text style={styles.summaryLabel}>First Name</Text>
-                      <Text style={styles.summaryValue}>{firstName}</Text>
-                    </View>
-
-                    <View style={styles.summaryRow}>
-                      <Text style={styles.summaryLabel}>Family Surname</Text>
-                      <Text style={styles.summaryValue}>{confirmedSurname}</Text>
-                    </View>
-
-                    <View style={styles.summaryRow}>
-                      <Text style={styles.summaryLabel}>Gender</Text>
-                      <Text style={styles.summaryValue}>
-                        {gender === 'male' ? '♂ MALE' : '♀ FEMALE'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Text style={styles.placeholderNotice}>
-                    Next steps: Adult appearance customisation and parent
-                    generation.
-                  </Text>
-                </View>
-
-                <View style={styles.menuButtonGroup}>
-                  <AppButton
-                    title="BACK"
-                    variant="secondary"
-                    onPress={() => setCurrentScreen('character-basic-info')}
-                  />
-                </View>
-              </View>
-            )}
-
-            {/* ============================================================== */}
-            {/* 5. NO SAVED LIVES FOUND                                         */}
+            {/* 4. NO SAVED LIVES FOUND                                         */}
             {/* ============================================================== */}
             {currentScreen === 'no-save-found' && (
               <View style={styles.placeholderContainer}>
@@ -934,7 +861,6 @@ export default function App() {
               </View>
             )}
           </ScrollView>
-
         </KeyboardAvoidingView>
       </SafeAreaView>
     </SafeAreaProvider>
@@ -943,18 +869,15 @@ export default function App() {
 
 // ============================================================================
 // STYLESHEET
-// Faithfully matches HTML/CSS reference:
-// - Background: #F5F3E8
-// - Primary Black: #080808
-// - Ink text: #171512
-// - Muted gold border: #A99A7D
-// - Secondary gold: #D0C4AB
-// - Footer text: #777267
+// Faithfully matches HTML/CSS reference specifications
 // ============================================================================
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: THEME.cream,
+  },
+  safeAreaSetup: {
+    backgroundColor: '#F5F3E8',
   },
   keyboardAvoiding: {
     flex: 1,
@@ -964,7 +887,7 @@ const styles = StyleSheet.create({
   },
 
   // ==========================================================================
-  // WELCOME SCREEN STYLES (Direct translation of reference CSS)
+  // WELCOME SCREEN STYLES
   // ==========================================================================
   welcomeScreenContainer: {
     flex: 1,
@@ -999,20 +922,9 @@ const styles = StyleSheet.create({
   menuButton: {
     position: 'relative',
     width: '100%',
-    paddingHorizontal: 22,
-    paddingVertical: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-  },
-  menuButtonPressed: {
-    transform: [{ scale: 0.98 }],
-  },
-  buttonInnerRow: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
     justifyContent: 'center',
   },
   startButton: {
@@ -1023,10 +935,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderColor: THEME.gold,
   },
+  buttonInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 26,
+    width: '100%',
+  },
   menuButtonText: {
     fontFamily: Platform.select({ ios: 'System', android: 'sans-serif' }),
-    fontWeight: '800',
-    textAlign: 'center',
+    fontWeight: '700',
+    textAlign: 'left',
   },
   startButtonText: {
     color: THEME.white,
@@ -1035,81 +954,264 @@ const styles = StyleSheet.create({
     color: THEME.ink,
   },
   buttonArrow: {
-    position: 'absolute',
-    right: 0,
-    fontSize: 25,
-    fontWeight: '400',
-    opacity: 0.5,
+    fontFamily: Platform.select({ ios: 'System', android: 'sans-serif' }),
+    fontSize: 22,
+    lineHeight: 24,
   },
   startButtonArrow: {
     color: THEME.white,
   },
   loadButtonArrow: {
-    color: THEME.ink,
+    color: THEME.gold,
   },
   buttonArrowEmphasized: {
-    opacity: 1,
+    opacity: 0.6,
+  },
+  menuButtonPressed: {
+    opacity: 0.88,
   },
   footerText: {
-    color: THEME.footer,
     fontFamily: Platform.select({ ios: 'System', android: 'sans-serif' }),
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 2.5,
     textAlign: 'center',
+    color: THEME.footer,
   },
 
   // ==========================================================================
-  // INNER FORM SCREENS STYLES
+  // CHARACTER SETUP SCREEN STYLES (Exact reproduction of style2.css)
   // ==========================================================================
-  formScreenContainer: {
+  setupScreenContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 32,
-  },
-  formHeaderGroup: {
     width: '100%',
-    maxWidth: 320,
-    alignItems: 'center',
-    marginBottom: 20,
+    minHeight: '100%',
+    paddingBottom: 22,
   },
-  heading: {
-    color: THEME.black,
-    fontSize: 22,
-    fontWeight: '700',
+  setupTopbar: {
+    height: 62,
+    paddingHorizontal: 17,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(120, 107, 86, 0.45)',
+  },
+  iconButtonWrapper: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: '#786B56',
+    overflow: 'hidden',
+  },
+  iconButtonPressed: {
+    transform: [{ scale: 0.94 }],
+  },
+  iconButtonGradient: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeIconText: {
+    fontSize: 27,
+    fontWeight: '500',
+    color: '#211F1C',
+    lineHeight: 28,
+    textAlign: 'center',
+  },
+  refreshIconText: {
+    fontSize: 25,
+    fontWeight: '800',
+    color: '#211F1C',
+    lineHeight: 26,
+    textAlign: 'center',
+  },
+  setupBrand: {
+    fontSize: 27,
+    fontWeight: '900',
+    letterSpacing: -0.8,
+    color: '#211F1C',
+  },
+  setupIntro: {
+    minHeight: 88,
+    paddingVertical: 15,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(120, 107, 86, 0.45)',
+  },
+  setupIntroTitle: {
+    color: '#211F1C',
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: 0.1,
+    textAlign: 'center',
+  },
+  setupIntroSubtitle: {
+    marginTop: 3,
+    color: '#514738',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  setupCardsSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 13,
+    paddingTop: 23,
+    paddingHorizontal: 20,
+  },
+  setupCardsSectionNarrow: {
+    paddingHorizontal: 14,
+    gap: 12,
+  },
+
+  // Setup Button Cards (.legacy-btn translation)
+  setupBtnPressable: {
+    width: '100%',
+  },
+  setupBtnPressed: {
+    transform: [{ translateY: 2 }],
+    opacity: 0.95,
+  },
+  setupBtnWrapper: {
+    width: '100%',
+    borderWidth: 1,
+    borderBottomWidth: 3,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  setupBtnGradient: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  setupBtnGloss: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '50%',
+    zIndex: 2,
+  },
+  setupBtnIconPanel: {
+    zIndex: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(0, 0, 0, 0.15)',
+  },
+  setupBtnIconText: {
+    color: '#FFFFFF',
+    lineHeight: 32,
+    textAlign: 'center',
+  },
+  setupBtnLabel: {
+    zIndex: 3,
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    gap: 2,
+  },
+  setupBtnTitle: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 22,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.18)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  setupBtnSubtitle: {
+    color: 'rgba(255, 255, 255, 0.92)',
+    fontWeight: '600',
+    letterSpacing: 0,
+    lineHeight: 16,
+    textAlign: 'center',
+  },
+  setupBtnArrow: {
+    zIndex: 3,
+    alignSelf: 'center',
+    width: 27,
+    marginRight: 8,
+    color: '#FFFFFF',
+    fontSize: 27,
+    fontWeight: '400',
+    lineHeight: 27,
+    textAlign: 'center',
+  },
+
+  // Divider (.divider in CSS)
+  setupDivider: {
+    height: 1,
+    marginVertical: 4,
+    marginHorizontal: 3,
+  },
+
+  // Section Label (.section-label in CSS)
+  setupSectionLabel: {
+    marginTop: 7,
+    marginLeft: 2,
+    color: '#000000',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.8,
+  },
+
+  // Footer (.footer in CSS)
+  setupFooter: {
+    marginTop: 27,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  setupFooterText: {
+    color: '#000000',
+    fontSize: 9,
+    fontWeight: '900',
     letterSpacing: 2,
     textAlign: 'center',
   },
-  instruction: {
-    color: THEME.black,
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 8,
-    lineHeight: 20,
+  setupFooterDot: {
+    color: '#000000',
   },
-  instructionBold: {
-    fontWeight: '700',
-  },
-  sectionGroup: {
+
+  // ==========================================================================
+  // CITY PICKER SCREEN STYLES
+  // ==========================================================================
+  cityPickerContainer: {
+    flex: 1,
     width: '100%',
-    maxWidth: 320,
-    marginBottom: 18,
+    maxWidth: 360,
+    alignSelf: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 24,
   },
-  sectionLabel: {
-    color: THEME.black,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1.2,
+  cityPickerHeaderGroup: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  citiesGrid: {
+    width: '100%',
     marginBottom: 8,
-    textAlign: 'center',
   },
-  surnamesList: {
-    width: '100%',
-    marginBottom: 4,
-  },
-  optionButton: {
+  cityOptionButton: {
     width: '100%',
     height: 48,
     borderRadius: 6,
@@ -1118,161 +1220,63 @@ const styles = StyleSheet.create({
     marginVertical: 4,
     paddingHorizontal: 16,
   },
-  optionButtonUnselected: {
+  cityOptionButtonUnselected: {
     backgroundColor: THEME.warmGreyBeige,
     borderWidth: 1,
     borderColor: THEME.warmGreyBeige,
   },
-  optionButtonSelected: {
+  cityOptionButtonSelected: {
     backgroundColor: THEME.black,
     borderWidth: 1,
     borderColor: THEME.black,
   },
-  optionButtonText: {
+  cityOptionButtonText: {
     fontSize: 15,
     fontWeight: '600',
     letterSpacing: 0.8,
   },
-  optionButtonTextUnselected: {
+  cityOptionButtonTextUnselected: {
     color: THEME.black,
   },
-  optionButtonTextSelected: {
+  cityOptionButtonTextSelected: {
     color: THEME.white,
   },
-  textInput: {
-    width: '100%',
-    height: 50,
-    backgroundColor: THEME.cream,
-    borderWidth: 1,
-    borderColor: THEME.black,
-    borderRadius: 6,
-    paddingHorizontal: 16,
-    fontSize: 15,
-    color: THEME.black,
-    marginBottom: 8,
-  },
-
-  // Gender Buttons Row
-  genderRow: {
-    flexDirection: 'row',
-    width: '100%',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  genderButton: {
-    flex: 1,
-    height: 52,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-  },
-  genderButtonUnselected: {
-    backgroundColor: THEME.warmGreyBeige,
-    borderWidth: 1,
-    borderColor: THEME.warmGreyBeige,
-  },
-  genderButtonSelected: {
-    backgroundColor: THEME.black,
-    borderWidth: 1,
-    borderColor: THEME.black,
-  },
-  genderButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  genderButtonTextUnselected: {
-    color: THEME.black,
-  },
-  genderButtonTextSelected: {
-    color: THEME.white,
-  },
-
-  // Error Messages
-  errorContainer: {
-    width: '100%',
-    maxWidth: 320,
-    padding: 10,
-    backgroundColor: THEME.warmGreyBeige,
-    borderWidth: 1,
-    borderColor: THEME.black,
-    borderRadius: 6,
-    marginBottom: 16,
-  },
-  errorText: {
-    color: THEME.black,
-    fontSize: 13,
-    textAlign: 'center',
-    fontWeight: '600',
-    lineHeight: 18,
-  },
-  fieldErrorText: {
-    color: THEME.black,
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 8,
-    marginTop: -2,
-    letterSpacing: 0.2,
-  },
-  formActionsGroup: {
+  cityPickerActionsGroup: {
     width: '100%',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 14,
   },
 
-  // Review Placeholder Screen
+  // ==========================================================================
+  // INFORMATIONAL SCREEN STYLES (No Saved Lives)
+  // ==========================================================================
   placeholderContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: '100%',
     paddingHorizontal: 24,
-    paddingVertical: 32,
-    minHeight: 520,
+    paddingTop: 40,
+    paddingBottom: 24,
+    justifyContent: 'space-between',
+    minHeight: 480,
   },
   placeholderContent: {
-    marginBottom: 28,
     alignItems: 'center',
-    width: '100%',
-    maxWidth: 320,
+    justifyContent: 'center',
+    flex: 1,
   },
-  summaryCard: {
-    width: '100%',
-    backgroundColor: THEME.warmGreyBeige,
-    borderWidth: 1,
-    borderColor: THEME.black,
-    borderRadius: 6,
-    padding: 18,
-    marginVertical: 20,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
-  },
-  summaryDivider: {
-    height: 1,
-    backgroundColor: THEME.black,
-    marginVertical: 8,
-    opacity: 0.2,
-  },
-  summaryLabel: {
+  heading: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 1.5,
     color: THEME.black,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  instruction: {
     fontSize: 13,
-    fontWeight: '500',
-  },
-  summaryValue: {
-    color: THEME.black,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  summaryValueBold: {
-    color: THEME.black,
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    color: '#514738',
+    textAlign: 'center',
+    marginBottom: 16,
   },
   placeholderNotice: {
     color: THEME.black,
